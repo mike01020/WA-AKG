@@ -76,7 +76,9 @@ import { useSession } from "@/components/dashboard/session-provider";
 export default function WebhooksPage() {
     const { sessionId, sessions } = useSession();
     const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
+    // Full key: only right after generating it (the server keeps just a hash)
     const [apiKey, setApiKey] = useState<string | null>(null);
+    const [keyHint, setKeyHint] = useState<string | null>(null);
     const [showApiKey, setShowApiKey] = useState(false);
     const [loading, setLoading] = useState(true);
     const [showRegenConfirm, setShowRegenConfirm] = useState(false);
@@ -133,7 +135,7 @@ export default function WebhooksPage() {
             const res = await fetch("/api/user/api-key");
             if (res.ok) {
                 const data = await res.json();
-                setApiKey(data?.data?.apiKey);
+                setKeyHint(data?.data?.hasKey ? data?.data?.hint : null);
             }
         } catch (error) {
             console.error("Failed to fetch API key", error);
@@ -146,7 +148,9 @@ export default function WebhooksPage() {
             if (res.ok) {
                 const data = await res.json();
                 setApiKey(data?.data?.apiKey);
-                toast.success("New API key generated!");
+                setKeyHint(data?.data?.hint || null);
+                setShowApiKey(true);
+                toast.success("New API key generated. Copy it now: it will not be shown again.");
             }
         } catch (error) {
             toast.error("Failed to generate API key");
@@ -362,6 +366,8 @@ export default function WebhooksPage() {
                         <div className="flex-1 bg-slate-100 rounded-md p-2 sm:p-3 font-mono text-xs sm:text-sm overflow-x-auto">
                             {apiKey ? (
                                 showApiKey ? apiKey : "••••••••••••••••••••••••••••••••"
+                            ) : keyHint ? (
+                                <span>{keyHint} <span className="text-muted-foreground">(hidden — generate a new one if you lost it)</span></span>
                             ) : (
                                 <span className="text-muted-foreground">No API key generated</span>
                             )}
@@ -377,13 +383,18 @@ export default function WebhooksPage() {
                             </>
                         )}
                         <Button onClick={() => {
-                            if (apiKey) setShowRegenConfirm(true);
+                            if (apiKey || keyHint) setShowRegenConfirm(true);
                             else generateNewApiKey();
                         }}>
                             <RefreshCw className="h-4 w-4 mr-2" />
-                            {apiKey ? "Regenerate" : "Generate"}
+                            {apiKey || keyHint ? "Regenerate" : "Generate"}
                         </Button>
                     </div>
+                    {apiKey && (
+                        <p className="text-xs font-medium text-amber-700 mt-2">
+                            Copy this key now and store it safely: for security it is saved only as a hash and will not be shown again.
+                        </p>
+                    )}
                     {apiKey && (
                         <p className="text-xs text-muted-foreground mt-2">
                             Example: <code className="bg-slate-100 px-1 py-0.5 rounded">curl -H "X-API-Key: {apiKey?.slice(0, 10)}..." http://your-server/api/sessions</code>

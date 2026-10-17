@@ -6,6 +6,7 @@ import path from "path";
 import pino from "pino";
 import { resolveToPhoneJidBySessionId as resolveToPhoneJid, isLidJid } from "./jid-utils";
 import { logger } from "./logger";
+import { MINIMAL_STORAGE } from "./storage-mode";
 import { waManager } from "@/modules/whatsapp/manager";
 
 // Event types that can trigger webhooks
@@ -572,9 +573,9 @@ export async function onMessageReceived(sessionId: string, message: any, existin
         }
     }
 
-    // Download media if available (or use existing)
+    // Download media if available (or use existing). Never in minimal storage mode.
     let fileUrl: string | null = existingFileUrl || null;
-    if (!fileUrl) {
+    if (!fileUrl && !MINIMAL_STORAGE) {
         try {
             fileUrl = await downloadAndSaveMedia(message, sessionId);
         } catch (e) {
@@ -622,9 +623,9 @@ export async function onMessageSent(sessionId: string, message: any, existingFil
     const isGroup = remoteJid.endsWith("@g.us");
     const remoteJidAlt = message.key?.remoteJidAlt || null;
 
-    // Download media for sent messages too
+    // Download media for sent messages too (never in minimal storage mode)
     let fileUrl: string | null = existingFileUrl || null;
-    if (!fileUrl) {
+    if (!fileUrl && !MINIMAL_STORAGE) {
         try {
             fileUrl = await downloadAndSaveMedia(message, sessionId);
         } catch (e) { /* ignore */ }

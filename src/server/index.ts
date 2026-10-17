@@ -35,6 +35,16 @@ if (!process.env.AUTH_SECRET || INSECURE_AUTH_SECRETS.includes(process.env.AUTH_
   }
 }
 
+// The WhatsApp credentials are encrypted with ENCRYPTION_KEY. In production it
+// must exist and differ from AUTH_SECRET (one leaked secret must not open both).
+if (!dev) {
+  const ek = process.env.ENCRYPTION_KEY;
+  if (!ek || ek.length < 32 || ek === process.env.AUTH_SECRET) {
+    logger.error("Server", "FATAL: ENCRYPTION_KEY must be set (32+ chars) and differ from AUTH_SECRET. Generate with: openssl rand -base64 32");
+    process.exit(1);
+  }
+}
+
 // On NTFS filesystems (e.g. /media/... partitions), Turbopack dev chunk naming containing colons
 // causes OS Error 22 (EINVAL). Default custom server to webpack unless TURBOPACK=1 is explicitly enabled.
 const useTurbopack = process.env.TURBOPACK === "1" || process.env.TURBO === "true";
@@ -71,9 +81,9 @@ app.prepare().then(async () => {
         if (
           !origin ||
           origin === allowedOrigin ||
-          origin.startsWith("http://localhost:") ||
-          origin.startsWith("http://127.0.0.1:") ||
-          origin === process.env.NEXTAUTH_URL
+          origin === process.env.NEXTAUTH_URL ||
+          // localhost only in development: in production any local page could talk to the socket
+          (dev && (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")))
         ) {
           callback(null, true);
         } else {
@@ -106,8 +116,9 @@ app.prepare().then(async () => {
 
     // --- WA-AKG Monitor Heartbeat ---
     // Sends a ping every 30 seconds to the monitoring server
-    // Telemetry opt-out is supported via ENABLE_TELEMETRY="false" or DISABLE_TELEMETRY="true"
-    const isTelemetryEnabled = process.env.ENABLE_TELEMETRY !== "false" && process.env.DISABLE_TELEMETRY !== "true";
+    // OFF by default (opt-in): only runs with ENABLE_TELEMETRY="true".
+    // Nothing about the installation is sent to a third-party server unless the operator chooses to.
+    const isTelemetryEnabled = process.env.ENABLE_TELEMETRY === "true" && process.env.DISABLE_TELEMETRY !== "true";
 
     if (isTelemetryEnabled) {
       const MONITOR_URL = "https://api-wa-akg.aikeigroup.net/api/ping";

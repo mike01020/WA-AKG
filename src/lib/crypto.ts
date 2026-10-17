@@ -8,12 +8,27 @@ const PREFIX = "enc:v1:";
 /**
  * Derives a 32-byte encryption key from environment secrets.
  */
+const derive = (secret: string) => crypto.createHash("sha256").update(secret).digest();
+
+/**
+ * The key that encrypts the WhatsApp credentials. It should be ENCRYPTION_KEY,
+ * kept apart from AUTH_SECRET: whoever leaks the login secret should not also
+ * get the WhatsApp sessions. (In production the server refuses to start
+ * without ENCRYPTION_KEY — see src/server/index.ts.)
+ */
 function getDerivedKey(): Buffer {
     const secret = process.env.ENCRYPTION_KEY || process.env.AUTH_SECRET;
     if (!secret) {
         throw new Error("ENCRYPTION_KEY or AUTH_SECRET must be defined in environment variables");
     }
-    return crypto.createHash("sha256").update(secret).digest();
+    return derive(secret);
+}
+
+/** Keys to try when decrypting: the current one, then the legacy AUTH_SECRET one. */
+function decryptionKeys(): Buffer[] {
+    const keys = [getDerivedKey()];
+    if (process.env.ENCRYPTION_KEY && process.env.AUTH_SECRET) keys.push(derive(process.env.AUTH_SECRET));
+    return keys;
 }
 
 /**
@@ -47,7 +62,6 @@ export function decryptData(data: string): string {
     }
 
     try {
-        const key = getDerivedKey();
         const raw = data.substring(PREFIX.length);
         const parts = raw.split(":");
         if (parts.length !== 3) {
@@ -58,13 +72,21 @@ export function decryptData(data: string): string {
         const iv = Buffer.from(ivHex, "hex");
         const tag = Buffer.from(tagHex, "hex");
 
-        const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-        decipher.setAuthTag(tag);
-
-        let decrypted = decipher.update(encryptedHex, "hex", "utf8");
-        decrypted += decipher.final("utf8");
-
-        return decrypted;
+        // Data encrypted before ENCRYPTION_KEY was set used the AUTH_SECRET key;
+        // it is re-encrypted with the new key on the next write.
+        let lastErr: any = null;
+        for (const key of decryptionKeys()) {
+            try {
+                const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+                decipher.setAuthTag(tag);
+                let decrypted = decipher.update(encryptedHex, "hex", "utf8");
+                decrypted += decipher.final("utf8");
+                return decrypted;
+            } catch (e) {
+                lastErr = e;
+            }
+        }
+        throw lastErr || new Error("Decryption failed");
     } catch (err: any) {
         logger.error("Crypto", "Decryption failed:", err.message);
         throw new Error("Failed to decrypt data payload");

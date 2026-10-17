@@ -6,11 +6,12 @@ import sharp from "sharp";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import { logger } from "@/lib/logger";
 
-const execAsync = promisify(exec);
+// execFile: arguments go straight to ffmpeg, no shell involved
+const execFileAsync = promisify(execFile);
 
 // Map to track start times for uptime
 const startTimes = new Map<string, number>();
@@ -254,7 +255,12 @@ export async function handleBotCommand(
 
                             // Compress Video using ffmpeg
                             // Extreme Compression: 8fps, CRF 40, 300k bitrate, ultrafast
-                            await execAsync(`ffmpeg -y -i "${tempInput}" -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=10" -c:v libx264 -preset ultrafast -crf 40 -b:v 300k -maxrate 300k -bufsize 600k -an "${tempOutput}"`);
+                            await execFileAsync("ffmpeg", [
+                                "-y", "-i", tempInput,
+                                "-vf", "scale=512:512:force_original_aspect_ratio=decrease,fps=10",
+                                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "40",
+                                "-b:v", "300k", "-maxrate", "300k", "-bufsize", "600k", "-an", tempOutput,
+                            ], { timeout: 60_000 });
 
                             buffer = await fs.readFile(tempOutput);
 

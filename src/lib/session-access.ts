@@ -110,7 +110,7 @@ export async function getAccessibleSessions(userId: string, userRole: string) {
                     }
                 },
                 botConfig: true,
-                webhooks: true,
+                webhooks: { select: { id: true, name: true, url: true, events: true, isActive: true, sessionId: true, userId: true, createdAt: true, updatedAt: true } }, // never the HMAC secret
                 _count: {
                     select: {
                         contacts: true,
@@ -137,7 +137,7 @@ export async function getAccessibleSessions(userId: string, userRole: string) {
                     }
                 },
                 botConfig: true,
-                webhooks: true,
+                webhooks: { select: { id: true, name: true, url: true, events: true, isActive: true, sessionId: true, userId: true, createdAt: true, updatedAt: true } }, // never the HMAC secret
                 _count: {
                     select: {
                         contacts: true,
@@ -174,7 +174,7 @@ export async function getAccessibleSessions(userId: string, userRole: string) {
                 }
             },
             botConfig: true,
-            webhooks: true,
+            webhooks: { select: { id: true, name: true, url: true, events: true, isActive: true, sessionId: true, userId: true, createdAt: true, updatedAt: true } }, // never the HMAC secret
             _count: {
                 select: {
                     contacts: true,

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { MINIMAL_STORAGE } from "@/lib/storage-mode";
 import type { WASocket, WAMessage, Contact } from "@whiskeysockets/baileys";
 import { normalizeMessageContent } from "@whiskeysockets/baileys";
 import { onMessageReceived, onMessageSent, dispatchWebhook, downloadAndSaveMedia } from "@/lib/webhook";
@@ -101,8 +102,8 @@ export const bindSessionStore = (sock: WASocket, sessionId: string, io: Server |
             dbSessionId = session.id;
         }
 
-        // Save all historical messages
-        if (messages && messages.length > 0) {
+        // Save all historical messages (not in minimal storage mode)
+        if (messages && messages.length > 0 && !MINIMAL_STORAGE) {
             logger.info("Store", `Syncing ${messages.length} historical messages...`);
             for (const msg of messages) {
                 try {
@@ -288,6 +289,18 @@ async function processAndSaveMessage(
     // Filter out Protocol & Empty Messages
     if (!msg.message) return false;
     if (!keyId || !remoteJid) return false;
+
+    // Minimal storage: nothing is saved; new messages only go out by webhook
+    if (MINIMAL_STORAGE) {
+        const tecnicas = ["protocolMessage", "senderKeyDistributionMessage", "messageContextInfo"];
+        const keys = Object.keys(msg.message).filter((k) => k !== "messageContextInfo");
+        if (!keys.length || keys.every((k) => tecnicas.includes(k))) return false;
+        if (triggerWebhook) {
+            if (fromMe) onMessageSent(sessionId, msg, null).catch(e => logger.error("Webhook", "Error in onMessageSent", e));
+            else onMessageReceived(sessionId, msg, null).catch(e => logger.error("Webhook", "Error in onMessageReceived", e));
+        }
+        return true;
+    }
 
     // Ignore specific technical message types
     const messageKeys = Object.keys(msg.message);

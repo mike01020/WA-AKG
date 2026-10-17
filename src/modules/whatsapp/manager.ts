@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { WhatsAppInstance } from "./instance";
 import { Server } from "socket.io";
@@ -68,7 +69,14 @@ export class WhatsAppManager {
             throw new Error("Socket.IO not initialized");
         }
 
-        const sessionId = customSessionId || Math.random().toString(36).substring(7);
+        // Random id from a cryptographic source. A custom id is allowed, but only
+        // with safe characters (it appears in URLs, room names and file names).
+        if (customSessionId !== undefined && customSessionId !== null && customSessionId !== "") {
+            if (typeof customSessionId !== "string" || !/^[A-Za-z0-9_-]{3,64}$/.test(customSessionId)) {
+                throw new Error("Invalid sessionId: use 3-64 letters, numbers, '-' or '_'");
+            }
+        }
+        const sessionId = customSessionId || randomBytes(12).toString("base64url");
 
         const session = await prisma.session.create({
             data: {

@@ -1,7 +1,7 @@
 import { Server, Socket } from "socket.io";
-import { prisma } from "../lib/prisma";
 import { canAccessSession } from "../lib/session-access";
 import { logger } from "../lib/logger";
+import { findUserByApiKey } from "../lib/api-key";
 
 function parseCookies(cookieHeader?: string): Record<string, string> {
     const cookies: Record<string, string> = {};
@@ -73,14 +73,11 @@ export function setupSocket(io: Server) {
             // 2. Try API Key from auth payload or x-api-key header
             const apiKey = 
                 (socket.handshake.auth?.apiKey as string) ||
-                (headers["x-api-key"] as string) ||
-                (socket.handshake.query?.apiKey as string);
+                (headers["x-api-key"] as string);
+            // (Not accepted in the query string: URLs end up in proxy and access logs.)
 
             if (apiKey && typeof apiKey === "string") {
-                const user = await prisma.user.findUnique({
-                    where: { apiKey },
-                    select: { id: true, role: true, email: true }
-                });
+                const user = await findUserByApiKey(apiKey);
 
                 if (user) {
                     socket.data.user = {

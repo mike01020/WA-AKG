@@ -39,12 +39,19 @@ export async function GET(
                 ]
             },
             include: {
-                session: true
+                // Only what the list needs (not the session's QR or status internals)
+                session: { select: { id: true, sessionId: true, name: true } }
             },
             orderBy: { createdAt: 'desc' }
         });
 
-        return NextResponse.json({ status: true, message: "Webhooks retrieved successfully", data: webhooks });
+        // The HMAC secret goes only to whoever created the webhook (or SUPERADMIN):
+        // someone with shared access to the session must not read another user's secret.
+        const data = webhooks.map((w) => (w.userId === user.id || user.role === "SUPERADMIN")
+            ? w
+            : { ...w, secret: null, hasSecret: Boolean(w.secret) });
+
+        return NextResponse.json({ status: true, message: "Webhooks retrieved successfully", data });
     } catch (error) {
         console.error("Fetch webhooks error:", error);
         return NextResponse.json({ status: false, message: "Failed to fetch webhooks", error: "Failed to fetch webhooks" }, { status: 500 });

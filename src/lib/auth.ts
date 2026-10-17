@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { authConfig } from "@/auth.config";
+import { bloqueado, hit, zerar, LIMITES } from "@/lib/rate-limit";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
@@ -20,15 +21,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (parsedCredentials.success) {
           const { email, password } = parsedCredentials.data;
-          
+          // Too many wrong passwords for this e-mail: refuse for a while,
+          // even with the right password (stops password guessing).
+          const chave = `login:email:${email.toLowerCase()}`;
+          if (bloqueado(chave, LIMITES.loginEmail.limite, LIMITES.loginEmail.janela)) return null;
+
           const user = await prisma.user.findUnique({ where: { email } });
-          if (!user) return null;
+          if (!user) {
+            hit(chave, LIMITES.loginEmail.limite, LIMITES.loginEmail.janela);
+            return null;
+          }
 
           const passwordsMatch = await bcrypt.compare(password, user.password);
 
           if (passwordsMatch) {
+             zerar(chave);
              return user;
           }
+          hit(chave, LIMITES.loginEmail.limite, LIMITES.loginEmail.janela);
         }
         return null;
       },

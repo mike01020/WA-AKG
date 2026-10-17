@@ -3,6 +3,7 @@ import { prisma } from "./prisma";
 import { NextRequest } from "next/server";
 import { auth } from "./auth";
 import { logger } from "./logger";
+import { findUserByApiKey, generateApiKey as gerarChave } from "./api-key";
 
 // Role hierarchy for permission checks
 const ROLE_HIERARCHY = {
@@ -23,17 +24,7 @@ export async function validateApiKey(request: NextRequest) {
         return null;
     }
 
-    try {
-        const user = await prisma.user.findUnique({
-            where: { apiKey },
-            select: { id: true, email: true, name: true, role: true }
-        });
-
-        return user;
-    } catch (error) {
-        logger.error("Auth", "API key validation error:", error);
-        return null;
-    }
+    return findUserByApiKey(apiKey);
 }
 
 /**
@@ -82,5 +73,5 @@ export type { Role } from "./session-access";
  * Generate a cryptographically secure API key
  */
 export function generateApiKey(): string {
-    return `wag_${crypto.randomBytes(24).toString("base64url")}`;
+    return gerarChave();
 }

@@ -2,6 +2,12 @@ import { auth } from "@/lib/auth";
 import { validateApiKey } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { hit, ipDe, LIMITES } from "@/lib/rate-limit";
+
+const muitas = (segundos: number) => NextResponse.json(
+    { status: false, message: "Too many requests. Try again later.", error: "Too many requests" },
+    { status: 429, headers: { "Retry-After": String(segundos) } }
+);
 
 export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
@@ -28,6 +34,25 @@ export async function proxy(request: NextRequest) {
 
     // API routes: Check for valid API key or session
     if (pathname.startsWith("/api/")) {
+        const ip = ipDe(request.headers);
+
+        // Login attempts (NextAuth credentials callback) and registration
+        if (request.method === "POST" && pathname.startsWith("/api/auth/callback/credentials")) {
+            const espera = hit(`login:ip:${ip}`, LIMITES.loginIp.limite, LIMITES.loginIp.janela);
+            if (espera) return muitas(espera);
+        }
+        if (request.method === "POST" && pathname === "/api/auth/register") {
+            const espera = hit(`cadastro:ip:${ip}`, LIMITES.cadastro.limite, LIMITES.cadastro.janela);
+            if (espera) return muitas(espera);
+        }
+
+        // General API limit, per IP
+        const geral = LIMITES.api();
+        if (geral.ativo && !pathname.startsWith("/api/auth")) {
+            const espera = hit(`api:ip:${ip}`, geral.limite, geral.janela);
+            if (espera) return muitas(espera);
+        }
+
         // Skip auth endpoints
         if (pathname.startsWith("/api/auth")) {
             return NextResponse.next();
